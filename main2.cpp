@@ -81,6 +81,11 @@ public:
     WsaPollfd(const UINT size_on_init, const UINT unit_in_extend)
         : size_on_init{ size_on_init }, unit_in_extend{ unit_in_extend }, capacity_ary_pollfd { size_on_init }
     {
+        if (m_ary_pollfd == nullptr)
+        {
+            throw "!!! WsaPollfd:: new WSAPOLLFD[size_on_init]";
+        }
+
         for (UINT idx = 0; idx < size_on_init; ++idx)
         {
             m_ary_pollfd[idx].fd = INVALID_SOCKET;
@@ -106,6 +111,10 @@ public:
 
         const UINT capacity_ary_pollfd_extd = capacity_ary_pollfd + unit_in_extend;
         WSAPOLLFD* const ary_pollfd_extd = new WSAPOLLFD[capacity_ary_pollfd_extd];
+        if (ary_pollfd_extd == nullptr)
+        {
+            throw "WsaPollfd:: Extend(): new WSAPOLLFD[capacity_ary_pollfd_extd]";
+        }
 
         std::memcpy(ary_pollfd_extd, m_ary_pollfd, capacity_ary_pollfd * sizeof WSAPOLLFD);
         for (UINT idx = capacity_ary_pollfd; idx < capacity_ary_pollfd_extd; ++idx)
@@ -326,7 +335,10 @@ public:
                 std::cout << "+++ Server:: new Socket_client()" << std::endl;
             }
 
-            (void)new Socket_client(mc_fd_sock_listener, m_p_WsaPollfd);
+            if (new Socket_client(mc_fd_sock_listener, m_p_WsaPollfd) == nullptr)
+            {
+                throw "Socket_server:: OnEvent(): new Socket_client(mc_fd_sock_listener, m_p_WsaPollfd))";
+            }
         }
     }
 };
@@ -343,7 +355,10 @@ int main_2()
     }
 
     WsaPollfd wsapollfd(PCS_client_on_init, PCS_client_in_extend);
-    (void)new Socket_server(&wsapollfd);
+    if (new Socket_server(&wsapollfd) == nullptr)
+    {
+        throw "new Socket_server(&wsapollfd)";
+    }
 
     // Debug
     {

@@ -231,9 +231,8 @@ public:
         closesocket(mc_fd_sock_client);
     }
 
-    virtual void OnEvent(const short revents)  const override
+    virtual void OnEvent(const short revents) const override
     {
-
         if (revents & POLLRDNORM)
         {
             // Debug

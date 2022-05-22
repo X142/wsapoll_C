@@ -60,7 +60,7 @@ void DBG_Show_pollfd(const WSAPOLLFD* const _ary_pollfd, const ULONG _pcs_valid_
 struct I_Socket_Type
 {
     virtual ~I_Socket_Type() {}
-    virtual void OnEvent([[maybe_unused]] const short revents) {}
+    virtual void OnEvent([[maybe_unused]] const short revents) const {}
 };
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -231,7 +231,7 @@ public:
         closesocket(mc_fd_sock_client);
     }
 
-    virtual void OnEvent(const short revents) override
+    virtual void OnEvent(const short revents)  const override
     {
 
         if (revents & POLLRDNORM)
@@ -326,7 +326,7 @@ public:
         closesocket(mc_fd_sock_listener);
     }
 
-    virtual void OnEvent(const short revents) override
+    virtual void OnEvent(const short revents) const override
     {
         if (revents & POLLRDNORM)
         {
@@ -344,7 +344,7 @@ public:
 };
 
 // ----------------------------------------------------------------------------------------------------------------
-const int DBG_cnt = 10;
+int DBG_cnt = 10;
 
 // ----------------------------------------------------------------------------------------------------------------
 int main_2()
@@ -410,7 +410,7 @@ int main_2()
             const short revents = ary_pollfd->revents;
             if (revents)
             {
-                I_Socket_Type* const EventSocket = wsapollfd.GetEventSocket(&ary_pollfd);
+                const I_Socket_Type* const EventSocket = wsapollfd.GetEventSocket(&ary_pollfd);
                 EventSocket->OnEvent(revents);
                 --cnt_Event_WSAPoll;
             }

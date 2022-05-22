@@ -12,7 +12,7 @@
 #define NUM_backlog_for_listen 10
 
 #define PCS_client_on_init 2
-#define PCS_client_in_extend 2
+#define PCS_client_in_extd 2
 
 // ----------------------------------------------------------------------------------------------------------------
 static inline void show_event_info(const char* events, const short flag)
@@ -344,7 +344,7 @@ public:
 };
 
 // ----------------------------------------------------------------------------------------------------------------
-int DBG_cnt = 10;
+const int DBG_cnt = 10;
 
 // ----------------------------------------------------------------------------------------------------------------
 int main_2()
@@ -354,7 +354,7 @@ int main_2()
         std::cout << "=== Socket_server creating..." << std::endl;
     }
 
-    WsaPollfd wsapollfd(PCS_client_on_init, PCS_client_in_extend);
+    WsaPollfd wsapollfd(PCS_client_on_init, PCS_client_in_extd);
     if (new Socket_server(&wsapollfd) == nullptr)
     {
         throw "new Socket_server(&wsapollfd)";
@@ -378,7 +378,7 @@ int main_2()
             }
         }
 
-        const std::pair<WSAPOLLFD*, ULONG> pollfd_pcs = wsapollfd.Get_params_WSAPoll();
+        std::pair<WSAPOLLFD*, ULONG> pollfd_pcs = wsapollfd.Get_params_WSAPoll();
         WSAPOLLFD* ary_pollfd = pollfd_pcs.first;
         const ULONG pcs_valid_pollfd = pollfd_pcs.second;
 
@@ -410,7 +410,7 @@ int main_2()
             const short revents = ary_pollfd->revents;
             if (revents)
             {
-                I_Socket_Type* EventSocket = wsapollfd.GetEventSocket(&ary_pollfd);
+                I_Socket_Type* const EventSocket = wsapollfd.GetEventSocket(&ary_pollfd);
                 EventSocket->OnEvent(revents);
                 --cnt_Event_WSAPoll;
             }

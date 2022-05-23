@@ -227,7 +227,10 @@ public:
 
     ~Socket_client()
     {
-        closesocket(mc_fd_sock_client);
+        if (mc_fd_sock_client != INVALID_SOCKET)
+        {
+            closesocket(mc_fd_sock_client);
+        }
     }
 
     virtual void OnEvent(const short revents) const override
@@ -328,7 +331,10 @@ public:
 
     ~Socket_server()
     {
-        closesocket(mc_fd_sock_listener);
+        if (mc_fd_sock_listener != INVALID_SOCKET)
+        {
+            closesocket(mc_fd_sock_listener);
+        }
     }
 
     virtual void OnEvent(const short revents) const override

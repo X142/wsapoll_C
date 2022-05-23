@@ -136,7 +136,7 @@ public:
         }
     }
 
-    void Set_pollfd_and_Socket(const std::pair<WSAPOLLFD*, I_Socket_Type*>& p_pollfd_And_p_Socket)
+    void Set_pollfd_and_Socket(WSAPOLLFD* p_pollfd, I_Socket_Type* p_Socket)
     {
         // Ž©“®Šg’£
         if (m_pcs_valid_pollfd >= capacity_ary_pollfd)
@@ -144,14 +144,13 @@ public:
             Extend();
         }
 
-        const auto [p_pollfd, p_Socket] = p_pollfd_And_p_Socket;
         m_ary_pollfd[m_pcs_valid_pollfd] = *p_pollfd;
         m_vec_Socket.push_back(p_Socket);
         ++m_pcs_valid_pollfd;
 
         // Debug
         {
-            std::cout << "  " << "fd: " << std::dec << p_pollfd_And_p_Socket.first->fd << std::endl;
+            std::cout << "  " << "fd: " << std::dec << p_pollfd->fd << std::endl;
         }
     }
 
@@ -186,7 +185,7 @@ public:
         return m_vec_Socket[idx];
     }
 
-    std::pair<WSAPOLLFD*, ULONG> Get_params_WSAPoll()
+    std::pair<WSAPOLLFD*, const ULONG> Get_params_WSAPoll()
     {
         return { m_ary_pollfd, m_pcs_valid_pollfd }; // RVO
     }
@@ -223,7 +222,7 @@ public:
     void Rgst_to_WsaPollfd()
     {
         WSAPOLLFD pollfd_client = { mc_fd_sock_client, POLLRDNORM, 0 };
-        m_p_WsaPollfd->Set_pollfd_and_Socket( { &pollfd_client, this } );
+        m_p_WsaPollfd->Set_pollfd_and_Socket(&pollfd_client, this);
     }
 
     ~Socket_client()
@@ -285,39 +284,46 @@ public:
         {
             throw "!!! Socket_server:: socket()";
         }
-
+        try
         {
-            BOOL mode_socket_reuse = 1;
-            if (setsockopt(mc_fd_sock_listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&mode_socket_reuse, sizeof mode_socket_reuse) == SOCKET_ERROR)
             {
-                throw "!!! Socket_server:: setsockopt()";
+                BOOL mode_socket_reuse = 1;
+                if (setsockopt(mc_fd_sock_listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&mode_socket_reuse, sizeof mode_socket_reuse) == SOCKET_ERROR)
+                {
+                    throw "!!! Socket_server:: setsockopt()";
+                }
             }
-        }
 
-        {
-            ULONG mode_socket_nonblocking = 1;
-            if (ioctlsocket(mc_fd_sock_listener, FIONBIO, &mode_socket_nonblocking) == SOCKET_ERROR)
             {
-                throw "!!! Socket_server:: socket()";
+                ULONG mode_socket_nonblocking = 1;
+                if (ioctlsocket(mc_fd_sock_listener, FIONBIO, &mode_socket_nonblocking) == SOCKET_ERROR)
+                {
+                    throw "!!! Socket_server:: socket()";
+                }
             }
-        }
 
-        if (bind(mc_fd_sock_listener, (sockaddr*)&mc_addr_sock_listener, sizeof mc_addr_sock_listener) == SOCKET_ERROR)
+            if (bind(mc_fd_sock_listener, (sockaddr*)&mc_addr_sock_listener, sizeof mc_addr_sock_listener) == SOCKET_ERROR)
+            {
+                throw "!!! Socket_server:: bind()";
+            }
+
+            if (listen(mc_fd_sock_listener, NUM_backlog_for_listen) == SOCKET_ERROR)
+            {
+                throw "!!! Socket_server:: listen()";
+            }
+
+            Rgst_to_WsaPollfd();
+        }
+        catch([[maybe_unused]] const char* const err)
         {
-            throw "!!! Socket_server:: bind()";
+            closesocket(mc_fd_sock_listener);
+            throw;
         }
-
-        if (listen(mc_fd_sock_listener, NUM_backlog_for_listen) == SOCKET_ERROR)
-        {
-            throw "!!! Socket_server:: listen()";
-        }
-
-        Rgst_to_WsaPollfd();
     }
     void Rgst_to_WsaPollfd()
     {
         WSAPOLLFD pollfd_listener = { mc_fd_sock_listener, POLLRDNORM, 0 };
-        m_p_WsaPollfd->Set_pollfd_and_Socket({ &pollfd_listener, this });
+        m_p_WsaPollfd->Set_pollfd_and_Socket(&pollfd_listener, this);
     }
 
     ~Socket_server()
@@ -377,9 +383,7 @@ int main_2()
             }
         }
 
-        std::pair<WSAPOLLFD*, ULONG> pollfd_pcs = wsapollfd.Get_params_WSAPoll();
-        WSAPOLLFD* ary_pollfd = pollfd_pcs.first;
-        const ULONG pcs_valid_pollfd = pollfd_pcs.second;
+        auto [ary_pollfd, pcs_valid_pollfd] = wsapollfd.Get_params_WSAPoll();
 
         int cnt_Event_WSAPoll = WSAPoll(ary_pollfd, pcs_valid_pollfd, -1);
 

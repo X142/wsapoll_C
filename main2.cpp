@@ -136,7 +136,7 @@ public:
         }
     }
 
-    void Set_pollfd_and_Socket(WSAPOLLFD* p_pollfd, I_Socket_Type* p_Socket)
+    void Set_pollfd_and_Socket(const WSAPOLLFD* const p_pollfd, I_Socket_Type* const p_Socket)
     {
         // Ž©“®Šg’£
         if (m_pcs_valid_pollfd >= capacity_ary_pollfd)

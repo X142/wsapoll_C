@@ -60,26 +60,30 @@ void DBG_Show_pollfd(const WSAPOLLFD* const _ary_pollfd, const ULONG _pcs_valid_
 struct I_Socket_Type
 {
     virtual ~I_Socket_Type() {}
-    virtual void OnEvent([[maybe_unused]] const short revents) const {}
+    virtual WSAPOLLFD const* OnEvent(const short revents) const = 0;
 };
 
 // ----------------------------------------------------------------------------------------------------------------
 class WsaPollfd
 {
+private:
     const UINT size_on_init;
-    const UINT unit_in_extend;
+    const UINT unit_in_extd;
 
     WSAPOLLFD* m_ary_pollfd = new WSAPOLLFD[size_on_init];
-    UINT m_pcs_valid_pollfd = 0;
+    UINT pcs_valid_pollfd = 0;
     UINT capacity_ary_pollfd;
     
     std::vector<I_Socket_Type*> m_vec_Socket;
 
-    WSAPOLLFD ** p_p_pos_in_ary_pollfd_in_main = nullptr;
+    WSAPOLLFD const* p_in_ary_pollfd = nullptr;
+    // main 関数に返すポインタ
+    // この位置に const が入っているのは必然。
+    // 管理しているオブジェクトの内容を別の管理主体に書き換えられてはならない。
 
 public:
-    WsaPollfd(const UINT size_on_init, const UINT unit_in_extend)
-        : size_on_init{ size_on_init }, unit_in_extend{ unit_in_extend }, capacity_ary_pollfd { size_on_init }
+    WsaPollfd(const UINT size_on_init, const UINT unit_in_extd)
+        : size_on_init{ size_on_init }, unit_in_extd{ unit_in_extd }, capacity_ary_pollfd { size_on_init }
     {
         if (m_ary_pollfd == nullptr)
         {
@@ -98,7 +102,7 @@ public:
         delete[] m_ary_pollfd;
 
         std::vector<I_Socket_Type*>::iterator itr_Socket = m_vec_Socket.begin();
-        for (UINT idx = 0; idx < m_pcs_valid_pollfd; ++idx)
+        for (UINT idx = 0; idx < pcs_valid_pollfd; ++idx)
         {
             delete *itr_Socket;
             ++itr_Socket;
@@ -107,9 +111,9 @@ public:
 
     void Extend()
     {
-        const int idx_pos_in_ary_pollfd = int(*p_p_pos_in_ary_pollfd_in_main - m_ary_pollfd);
+        const int idx_pos_in_ary_pollfd = int(p_in_ary_pollfd - m_ary_pollfd);
 
-        const UINT capacity_ary_pollfd_extd = capacity_ary_pollfd + unit_in_extend;
+        const UINT capacity_ary_pollfd_extd = capacity_ary_pollfd + unit_in_extd;
         WSAPOLLFD* const ary_pollfd_extd = new WSAPOLLFD[capacity_ary_pollfd_extd];
         if (ary_pollfd_extd == nullptr)
         {
@@ -124,29 +128,28 @@ public:
         }
         delete[] m_ary_pollfd;
 
-        m_ary_pollfd = ary_pollfd_extd;
         capacity_ary_pollfd = capacity_ary_pollfd_extd;
-
-        *p_p_pos_in_ary_pollfd_in_main = &ary_pollfd_extd[idx_pos_in_ary_pollfd];
+        m_ary_pollfd = ary_pollfd_extd;
+        p_in_ary_pollfd = &ary_pollfd_extd[idx_pos_in_ary_pollfd];
 
         // Debug
         {
-            std::cout << "  " << "/// Extended" << "  " << capacity_ary_pollfd - unit_in_extend << " -> " << capacity_ary_pollfd << std::endl;
-            // DBG_Show_pollfd(m_ary_pollfd, m_pcs_valid_pollfd);
+            std::cout << "  " << "/// Extended" << "  " << capacity_ary_pollfd - unit_in_extd << " -> " << capacity_ary_pollfd << std::endl;
+            // DBG_Show_pollfd(m_ary_pollfd, pcs_valid_pollfd);
         }
     }
 
-    void Set_pollfd_and_Socket(const WSAPOLLFD* const p_pollfd, I_Socket_Type* const p_Socket)
+    void Set_pollfd_and_Socket(const WSAPOLLFD* const p_pollfd, const I_Socket_Type* const p_Socket)
     {
         // 自動拡張
-        if (m_pcs_valid_pollfd >= capacity_ary_pollfd)
+        if (pcs_valid_pollfd >= capacity_ary_pollfd)
         {
             Extend();
         }
 
-        m_ary_pollfd[m_pcs_valid_pollfd] = *p_pollfd;
-        m_vec_Socket.push_back(p_Socket);
-        ++m_pcs_valid_pollfd;
+        m_ary_pollfd[pcs_valid_pollfd] = *p_pollfd;
+        m_vec_Socket.push_back((I_Socket_Type* const)p_Socket);
+        ++pcs_valid_pollfd;
 
         // Debug
         {
@@ -154,46 +157,75 @@ public:
         }
     }
 
-    void Delete()
+    WSAPOLLFD const* Delete()
     {
         // Debug
         {
-            std::cout << "  " << "fd: " << std::dec << (*p_p_pos_in_ary_pollfd_in_main)->fd << std::endl;
+            std::cout << "  " << "fd: " << std::dec << p_in_ary_pollfd->fd << std::endl;
         }
 
-        const UINT idx = (UINT)(*p_p_pos_in_ary_pollfd_in_main - m_ary_pollfd);
+        const UINT idx = (UINT)(p_in_ary_pollfd - m_ary_pollfd);
         {
             std::memcpy(
                 &m_ary_pollfd[idx],
                 &m_ary_pollfd[idx + 1],
-                ((m_pcs_valid_pollfd - 1) - (idx + 1) + 1) * sizeof WSAPOLLFD
+                ((pcs_valid_pollfd - 1) - (idx + 1) + 1) * sizeof WSAPOLLFD
             );
-            m_ary_pollfd[m_pcs_valid_pollfd - 1].fd = INVALID_SOCKET;
+            m_ary_pollfd[pcs_valid_pollfd - 1].fd = INVALID_SOCKET;
         }
         {
             delete m_vec_Socket[idx];
             (void)m_vec_Socket.erase(m_vec_Socket.begin() + (int)idx);
         }
-        --m_pcs_valid_pollfd;
-        --*p_p_pos_in_ary_pollfd_in_main;
+        --pcs_valid_pollfd;
+        --p_in_ary_pollfd;
+
+        return p_in_ary_pollfd;
     }
 
-    I_Socket_Type* GetEventSocket(WSAPOLLFD ** _p_p_pos_in_ary_pollfd_in_main)
+    I_Socket_Type const* GetEventSocket(WSAPOLLFD const* const _p_in_ary_pollfd)
+    // 引数：
+    // 修正前の &_p_in_ary_pollfd の場合、
+    // main 関数の管理オブジェクトを変更することになり、OOP の考え方に馴染まない。
+    // 
+    // 1 つ目の const：
+    // 今回は WSAPOLLFD const* を受け取ることが前提になっているわけだけど、、、
+    // 一般論として、
+    // 関数内で変更しないものを const 引数で受け取れば、最適化を促すという話がある。
+    // 関数呼び出し前、
+    // main 関数側が *p_in_ary_pollfd をアクセスしていた場合には、
+    // *p_in_ary_pollfd の内容がどこかのレジスタに保存されている。
+    // この const が付いていれば、関数呼び出し時、そのレジスタを破棄することはなく
+    // 関数呼び出し後も、そのレジスタを利用できる。
+    // 結果的に、不要なメモリアクセスを発生させないことをコンパイラに指示しているということであり、
+    // const は変更しないという意味論だけではないということ。
+    // 
+    // メンバ関数間でエイリアスをもつメンバ変数群についても同様の話がいえる。
+    // メンバ関数の const {} は、先述のレジスタ破棄を防止するというコンパイラへの指示でもある。
     {
-        p_p_pos_in_ary_pollfd_in_main = _p_p_pos_in_ary_pollfd_in_main;
-        const UINT idx = (UINT)(*p_p_pos_in_ary_pollfd_in_main - m_ary_pollfd);
+        p_in_ary_pollfd = _p_in_ary_pollfd;
+        const UINT idx = (UINT)(p_in_ary_pollfd - m_ary_pollfd);
         return m_vec_Socket[idx];
     }
 
-    std::pair<WSAPOLLFD*, const ULONG> Get_params_WSAPoll()
+    std::pair<WSAPOLLFD const*, const ULONG> Get_params_WSAPoll()
+    // 変更前：std::pair<WSAPOLLFD*, const ULONG>
+    // 変更後：std::pair<WSAPOLLFD const*, const ULONG>
+    // 管理しているオブジェクト（m_ary_pollfd）を他の管理主体に書き換えられてはならない
     {
-        return { m_ary_pollfd, m_pcs_valid_pollfd }; // RVO
+        return { m_ary_pollfd, pcs_valid_pollfd }; // RVO
+    }
+
+    WSAPOLLFD const* Get_p_in_ary_pollfd()
+    {
+        return p_in_ary_pollfd;
     }
 };
 
 // ----------------------------------------------------------------------------------------------------------------
 class Socket_client : public I_Socket_Type
 {
+private:
     const sockaddr_in6 mc_addr_client = { 0 };
     const int len_addr_client = sizeof mc_addr_client;
     const SOCKET mc_fd_sock_client;
@@ -201,6 +233,7 @@ class Socket_client : public I_Socket_Type
 
 public:
     Socket_client(const SOCKET fd_sock_listener, WsaPollfd* const p_WsaPollfd)
+    try
         : mc_fd_sock_client{ accept(fd_sock_listener, (sockaddr*)&mc_addr_client, (int*)&len_addr_client) }
         , m_p_WsaPollfd { p_WsaPollfd }
     {
@@ -219,9 +252,17 @@ public:
 
         Rgst_to_WsaPollfd();
     }
+    catch ([[maybe_unused]] const char* const)
+    {
+        if (mc_fd_sock_client != INVALID_SOCKET)
+        {
+            closesocket(mc_fd_sock_client);
+        }
+        throw;
+    }
     void Rgst_to_WsaPollfd()
     {
-        WSAPOLLFD pollfd_client = { mc_fd_sock_client, POLLRDNORM, 0 };
+        const WSAPOLLFD pollfd_client = { mc_fd_sock_client, POLLRDNORM, 0 };
         m_p_WsaPollfd->Set_pollfd_and_Socket(&pollfd_client, this);
     }
 
@@ -233,7 +274,7 @@ public:
         }
     }
 
-    virtual void OnEvent(const short revents) const override
+    virtual WSAPOLLFD const* OnEvent(const short revents) const override
     {
         if (revents & POLLRDNORM)
         {
@@ -267,65 +308,70 @@ public:
                 std::cout << "--- Client:: Delete()" << std::endl;
             }
             
-            m_p_WsaPollfd->Delete();
+            return m_p_WsaPollfd->Delete();
         }
+        
+        return m_p_WsaPollfd->Get_p_in_ary_pollfd();
+    
     }
 };
 
 // ----------------------------------------------------------------------------------------------------------------
 class Socket_server : public I_Socket_Type
 {
+private:
     const sockaddr_in6 mc_addr_sock_listener = { AF_INET6, htons(NUM_listening_Port), 0, in6addr_loopback, { 0 } };
     const SOCKET mc_fd_sock_listener = socket(AF_INET6, SOCK_STREAM, 0);
     WsaPollfd* const m_p_WsaPollfd;
 
 public:
     Socket_server(WsaPollfd* const p_WsaPollfd)
+    try
         :  m_p_WsaPollfd { p_WsaPollfd }
     {
         if (mc_fd_sock_listener == INVALID_SOCKET)
         {
             throw "!!! Socket_server:: socket()";
         }
-        try
         {
+            const BOOL mode_socket_reuse = 1;
+            if (setsockopt(mc_fd_sock_listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&mode_socket_reuse, sizeof mode_socket_reuse) == SOCKET_ERROR)
             {
-                BOOL mode_socket_reuse = 1;
-                if (setsockopt(mc_fd_sock_listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&mode_socket_reuse, sizeof mode_socket_reuse) == SOCKET_ERROR)
-                {
-                    throw "!!! Socket_server:: setsockopt()";
-                }
+                throw "!!! Socket_server:: setsockopt()";
             }
-
-            {
-                ULONG mode_socket_nonblocking = 1;
-                if (ioctlsocket(mc_fd_sock_listener, FIONBIO, &mode_socket_nonblocking) == SOCKET_ERROR)
-                {
-                    throw "!!! Socket_server:: socket()";
-                }
-            }
-
-            if (bind(mc_fd_sock_listener, (sockaddr*)&mc_addr_sock_listener, sizeof mc_addr_sock_listener) == SOCKET_ERROR)
-            {
-                throw "!!! Socket_server:: bind()";
-            }
-
-            if (listen(mc_fd_sock_listener, NUM_backlog_for_listen) == SOCKET_ERROR)
-            {
-                throw "!!! Socket_server:: listen()";
-            }
-
-            Rgst_to_WsaPollfd();
         }
-        catch([[maybe_unused]] const char* const err)
+
+        {
+            const ULONG mode_socket_nonblocking = 1;
+            if (ioctlsocket(mc_fd_sock_listener, FIONBIO, (ULONG*)&mode_socket_nonblocking) == SOCKET_ERROR)
+            {
+                throw "!!! Socket_server:: socket()";
+            }
+        }
+
+        if (bind(mc_fd_sock_listener, (sockaddr*)&mc_addr_sock_listener, sizeof mc_addr_sock_listener) == SOCKET_ERROR)
+        {
+            throw "!!! Socket_server:: bind()";
+        }
+
+        if (listen(mc_fd_sock_listener, NUM_backlog_for_listen) == SOCKET_ERROR)
+        {
+            throw "!!! Socket_server:: listen()";
+        }
+
+        Rgst_to_WsaPollfd();
+    }
+    catch([[maybe_unused]] const char* const err)
+    {
+        if (mc_fd_sock_listener != INVALID_SOCKET)
         {
             closesocket(mc_fd_sock_listener);
-            throw;
         }
+        throw;
     }
     void Rgst_to_WsaPollfd()
     {
-        WSAPOLLFD pollfd_listener = { mc_fd_sock_listener, POLLRDNORM, 0 };
+        const WSAPOLLFD pollfd_listener = { mc_fd_sock_listener, POLLRDNORM, 0 };
         m_p_WsaPollfd->Set_pollfd_and_Socket(&pollfd_listener, this);
     }
 
@@ -337,7 +383,7 @@ public:
         }
     }
 
-    virtual void OnEvent(const short revents) const override
+    virtual WSAPOLLFD const* OnEvent(const short revents) const override
     {
         if (revents & POLLRDNORM)
         {
@@ -351,6 +397,8 @@ public:
                 throw "Socket_server:: OnEvent(): new Socket_client(mc_fd_sock_listener, m_p_WsaPollfd))";
             }
         }
+
+        return m_p_WsaPollfd->Get_p_in_ary_pollfd();
     }
 };
 
@@ -391,7 +439,8 @@ int main_2()
 
         auto [ary_pollfd, pcs_valid_pollfd] = wsapollfd.Get_params_WSAPoll();
 
-        int cnt_Event_WSAPoll = WSAPoll(ary_pollfd, pcs_valid_pollfd, -1);
+        // API に合わせてキャストを行うのは仕方がない
+        int cnt_Event_WSAPoll = WSAPoll((WSAPOLLFD*)ary_pollfd, pcs_valid_pollfd, -1);
 
         if (cnt_Event_WSAPoll == SOCKET_ERROR)
         {
@@ -410,20 +459,28 @@ int main_2()
             DBG_Show_pollfd(ary_pollfd, pcs_valid_pollfd);
         }
 
+        WSAPOLLFD const* p_in_ary_pollfd = ary_pollfd;
+        // この位置に const が入っているのは必然。
+        // ary_pollfd の内容は WsaPollfd class が管理しているものだから、こちらから書き換えることはできない。
         for (;;)
         {
             if (cnt_Event_WSAPoll == 0)
             {
                 break;
             }
-            const short revents = ary_pollfd->revents;
+
+            const short revents = p_in_ary_pollfd->revents;
             if (revents)
             {
-                const I_Socket_Type* const EventSocket = wsapollfd.GetEventSocket(&ary_pollfd);
-                EventSocket->OnEvent(revents);
+                const I_Socket_Type* const EventSocket = wsapollfd.GetEventSocket(p_in_ary_pollfd);
+                // 1 つ目の const は必然。
+                // EventSocket の内容は WsaPollfd class が管理しているものだから、こちらから書き換えることはできない。
+                p_in_ary_pollfd = EventSocket->OnEvent(revents);
+                // p_in_ary_pollfd は main 関数の管理オブジェクトなので、main 関数が書き換える。
                 --cnt_Event_WSAPoll;
             }
-            ++ary_pollfd;
+
+            ++p_in_ary_pollfd;
         }
 
         // Debug

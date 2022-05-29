@@ -6,6 +6,7 @@
 #include <ws2tcpip.h> // struct sockaddr_in6 (ws2ipdef.h), inet_ntop
 #include <iostream>
 #include <vector>
+#include <unordered_map> // Debug
 
 // ----------------------------------------------------------------------------------------------------------------
 #define NUM_listening_Port 12345
@@ -15,44 +16,29 @@
 #define PCS_client_in_extd 2
 
 // ----------------------------------------------------------------------------------------------------------------
-static inline void show_event_info(const char* events, const short flag)
+std::unordered_map<SHORT, const char*> d_event_code
 {
-    /*
-    // Event flag definitions for WSAPoll().
-    #define POLLRDNORM  0x0100
-    #define POLLRDBAND  0x0200
-    #define POLLIN      (POLLRDNORM | POLLRDBAND)
-    #define POLLPRI     0x0400
-
-    #define POLLWRNORM  0x0010
-    #define POLLOUT     (POLLWRNORM)
-    #define POLLWRBAND  0x0020
-
-    #define POLLERR     0x0001
-    #define POLLHUP     0x0002
-    #define POLLNVAL    0x0004
-    */
-    switch (flag)
-    {
-    case 0x0:
-        std::cout << "    " << "->" << events << ": " << "not in queried state" << "(" << "0x" << std::hex << flag << ")" << std::endl; break;
-    case 0x0002:
-        std::cout << "    " << "->" << events << ": " << "POLLHUP" << "(" << "0x" << std::hex << flag << ")" << std::endl; break;
-    case 0x0100:
-        std::cout << "    " << "->" << events << ": " "POLLRDNORM" << "(" << "0x" << std::hex << flag << ")" << std::endl; break;
-    default:
-        std::cout << "    " << "->" << events << ": " << "–¢‘Î‰ž‚Ìƒtƒ‰ƒO" << "(" << "0x" << std::hex << flag << ")" << std::endl; break;
-    }
-}
-void DBG_Show_pollfd(const WSAPOLLFD* const _ary_pollfd, const ULONG _pcs_valid_pollfd_in_ary)
+    std::pair{0x0000, "-"}, 
+    std::pair{0x0100, "POLLRDNORM"},
+    std::pair{0x0200, "POLLRDBAND"},
+    std::pair{0x0300, "POLLIN"},
+    std::pair{0x0400, "POLLPRI"},
+    std::pair{0x0010, "POLLWRNORM"},
+    std::pair{0x0010, "POLLOUT"},
+    std::pair{0x0020, "POLLWRBAND"},
+    std::pair{0x0001, "POLLERR"},
+    std::pair{0x0002, "POLLHUP"},
+    std::pair{0x0004, "POLLNVAL"}
+};
+void DBG_Show_pollfd(const WSAPOLLFD* const ary_pollfd, const ULONG pcs_valid_pollfd_in_ary)
 {
-    std::cout << "ary_pollfd" << "  " << "pcs: " << _pcs_valid_pollfd_in_ary << std::endl;
-    for (ULONG idx = 0; idx < _pcs_valid_pollfd_in_ary; ++idx)
+    std::cout << "ary_pollfd" << "  " << "pcs: " << pcs_valid_pollfd_in_ary << std::endl;
+    for (ULONG idx = 0; idx < pcs_valid_pollfd_in_ary; ++idx)
     {
         std::cout << "  " << "[" << idx << "]" << std::endl;
-        std::cout << "    " << "->fd: " << std::dec << _ary_pollfd[idx].fd << std::endl;
-        show_event_info("events", _ary_pollfd[idx].events);
-        show_event_info("revents", _ary_pollfd[idx].revents);
+        std::cout << "    " << "->fd: " << std::dec << ary_pollfd[idx].fd << std::endl;
+        std::cout << "    " << "->events: " << d_event_code[ary_pollfd[idx].events] << "(" << "0x" << std::hex <<ary_pollfd[idx].events << ")" << std::endl;
+        std::cout << "    " << "->revents: " << d_event_code[ary_pollfd[idx].revents] << "(" << "0x" << std::hex << ary_pollfd[idx].revents << ")" << std::endl;;
     }
 }
 

@@ -38,7 +38,7 @@ void DBG_Show_pollfd(const WSAPOLLFD* const ary_pollfd, const ULONG pcs_valid_po
         std::cout << "  " << "[" << idx << "]" << std::endl;
         std::cout << "    " << "->fd: " << std::dec << ary_pollfd[idx].fd << std::endl;
         std::cout << "    " << "->events: " << d_event_code[ary_pollfd[idx].events] << "(" << "0x" << std::hex <<ary_pollfd[idx].events << ")" << std::endl;
-        std::cout << "    " << "->revents: " << d_event_code[ary_pollfd[idx].revents] << "(" << "0x" << std::hex << ary_pollfd[idx].revents << ")" << std::endl;;
+        std::cout << "    " << "->revents: " << d_event_code[ary_pollfd[idx].revents] << "(" << "0x" << std::hex << ary_pollfd[idx].revents << ")" << std::endl;
     }
 }
 
@@ -184,15 +184,13 @@ public:
 class Socket_client : public I_Socket_Type
 {
 private:
-    const sockaddr_in6 mc_addr_client = { 0 };
-    const int len_addr_client = sizeof mc_addr_client;
     const SOCKET mc_fd_sock_client;
     WsaPollfd* const m_p_WsaPollfd;
 
 public:
     Socket_client(const SOCKET fd_sock_listener, WsaPollfd* const p_WsaPollfd)
     try
-        : mc_fd_sock_client{ accept(fd_sock_listener, (sockaddr*)&mc_addr_client, (int*)&len_addr_client) }
+        : mc_fd_sock_client{ accept(fd_sock_listener, nullptr, nullptr) }
         , m_p_WsaPollfd { p_WsaPollfd }
     {
         if (mc_fd_sock_client == INVALID_SOCKET)
@@ -209,6 +207,8 @@ public:
         }
 
         Rgst_to_WsaPollfd();
+
+        Show_addr_info();
     }
     catch ([[maybe_unused]] const char* const)
     {
@@ -272,13 +272,34 @@ public:
         
         return p_in_ary_pollfd;
     }
+
+    void Show_addr_info()
+    {
+        const sockaddr_in6 addr_client;
+        int addrlen = sizeof addr_client;
+        if (getpeername(mc_fd_sock_client, (sockaddr*)&addr_client, &addrlen) == SOCKET_ERROR)
+        {
+            throw "Socket_client:: Show_addr_info():getpeername()";
+        }
+
+        char str_ip_addr_client[INET6_ADDRSTRLEN];
+        if (inet_ntop(AF_INET6, &addr_client, str_ip_addr_client, sizeof str_ip_addr_client) == NULL)
+        {
+            throw "Socket_cient:: Show_addr_info(): inet_ntop()";
+        }
+
+        //std::cout << std::endl;
+        std::cout << "[addr_info]" << std::endl;
+        //std::cout << "  " << "fd: " << mc_fd_sock_client << std::endl;
+        std::cout << "  " << "IP: " << str_ip_addr_client << std::endl;
+        std::cout << "  " << "Port: " << addr_client.sin6_port << std::endl;
+    }
 };
 
 // ----------------------------------------------------------------------------------------------------------------
 class Socket_server : public I_Socket_Type
 {
 private:
-    const sockaddr_in6 mc_addr_sock_listener = { AF_INET6, htons(NUM_listening_Port), 0, in6addr_loopback, { 0 } };
     const SOCKET mc_fd_sock_listener = socket(AF_INET6, SOCK_STREAM, 0);
     WsaPollfd* const m_p_WsaPollfd;
 
@@ -307,7 +328,7 @@ public:
                 throw "!!! Socket_server:: socket()";
             }
         }
-
+        const sockaddr_in6 mc_addr_sock_listener = { AF_INET6, htons(NUM_listening_Port), 0, in6addr_loopback, { 0 } };
         if (bind(mc_fd_sock_listener, (sockaddr*)&mc_addr_sock_listener, sizeof mc_addr_sock_listener) == SOCKET_ERROR)
         {
             throw "!!! Socket_server:: bind()";

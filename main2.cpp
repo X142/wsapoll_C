@@ -18,7 +18,7 @@
 // ----------------------------------------------------------------------------------------------------------------
 std::unordered_map<SHORT, const char*> d_event_code
 {
-    std::pair{0x0000, "-"}, 
+    std::pair{0x0000, "- "}, 
     std::pair{0x0100, "POLLRDNORM"},
     std::pair{0x0200, "POLLRDBAND"},
     std::pair{0x0300, "POLLIN"},
@@ -169,7 +169,7 @@ public:
         return m_vec_Socket[idx];
     }
 
-    std::pair<WSAPOLLFD*, const ULONG> Get_params_WSAPoll()
+    std::pair<WSAPOLLFD*, const ULONG> Get_WSAPoll_args()
     {
         return { m_ary_pollfd, pcs_valid_pollfd }; // RVO
     }
@@ -410,7 +410,7 @@ int main_2()
     // Debug
     {
         std::cout << std::endl;
-        DBG_Show_pollfd(wsapollfd.Get_params_WSAPoll().first, wsapollfd.Get_params_WSAPoll().second);
+        DBG_Show_pollfd(wsapollfd.Get_WSAPoll_args().first, wsapollfd.Get_WSAPoll_args().second);
         std::cout << std::endl;
         std::cout << "=== Listening...\n" << std::endl;
     }
@@ -425,7 +425,7 @@ int main_2()
             }
         }
 
-        auto [ary_pollfd, pcs_valid_pollfd] = wsapollfd.Get_params_WSAPoll();
+        auto [ary_pollfd, pcs_valid_pollfd] = wsapollfd.Get_WSAPoll_args();
 
         int cnt_Event_WSAPoll = WSAPoll(ary_pollfd, pcs_valid_pollfd, -1);
 
@@ -469,7 +469,7 @@ int main_2()
         {
             std::cout << std::endl;
             std::cout << "<<< RESULT" << std::endl;
-            DBG_Show_pollfd(wsapollfd.Get_params_WSAPoll().first, wsapollfd.Get_params_WSAPoll().second);
+            DBG_Show_pollfd(wsapollfd.Get_WSAPoll_args().first, wsapollfd.Get_WSAPoll_args().second);
             std::cout << std::endl;
         }
     }

@@ -60,7 +60,7 @@ void DBG_Show_pollfd(const WSAPOLLFD* const _ary_pollfd, const ULONG _pcs_valid_
 struct I_Socket_Type
 {
     virtual ~I_Socket_Type() {}
-    virtual WSAPOLLFD const* OnEvent(const short revents) const = 0;
+    virtual WSAPOLLFD const* OnEvent(const short revents, WSAPOLLFD const* p_in_ary_pollfd) const = 0;
 };
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -75,11 +75,6 @@ private:
     UINT capacity_ary_pollfd;
     
     std::vector<I_Socket_Type*> m_vec_Socket;
-
-    WSAPOLLFD const* p_in_ary_pollfd = nullptr;
-    // main 関数に返すポインタ
-    // この位置に const が入っているのは必然。
-    // 管理しているオブジェクトの内容を別の管理主体に書き換えられてはならない。
 
 public:
     WsaPollfd(const UINT size_on_init, const UINT unit_in_extd)
@@ -111,8 +106,6 @@ public:
 
     void Extend()
     {
-        const int idx_pos_in_ary_pollfd = int(p_in_ary_pollfd - m_ary_pollfd);
-
         const UINT capacity_ary_pollfd_extd = capacity_ary_pollfd + unit_in_extd;
         WSAPOLLFD* const ary_pollfd_extd = new WSAPOLLFD[capacity_ary_pollfd_extd];
         if (ary_pollfd_extd == nullptr)
@@ -130,7 +123,6 @@ public:
 
         capacity_ary_pollfd = capacity_ary_pollfd_extd;
         m_ary_pollfd = ary_pollfd_extd;
-        p_in_ary_pollfd = &ary_pollfd_extd[idx_pos_in_ary_pollfd];
 
         // Debug
         {
@@ -157,7 +149,7 @@ public:
         }
     }
 
-    WSAPOLLFD const* Delete()
+   void Delete(WSAPOLLFD const* p_in_ary_pollfd)
     {
         // Debug
         {
@@ -178,47 +170,27 @@ public:
             (void)m_vec_Socket.erase(m_vec_Socket.begin() + (int)idx);
         }
         --pcs_valid_pollfd;
-        --p_in_ary_pollfd;
-
-        return p_in_ary_pollfd;
     }
 
-    I_Socket_Type const* GetEventSocket(WSAPOLLFD const* const _p_in_ary_pollfd)
-    // 引数：
-    // 修正前の &_p_in_ary_pollfd の場合、
-    // main 関数の管理オブジェクトを変更することになり、OOP の考え方に馴染まない。
-    // 
-    // 1 つ目の const：
-    // 今回は WSAPOLLFD const* を受け取ることが前提になっているわけだけど、、、
-    // 一般論として、
-    // 関数内で変更しないものを const 引数で受け取れば、最適化を促すという話がある。
-    // 関数呼び出し前、
-    // main 関数側が *p_in_ary_pollfd をアクセスしていた場合には、
-    // *p_in_ary_pollfd の内容がどこかのレジスタに保存されている。
-    // この const が付いていれば、関数呼び出し時、そのレジスタを破棄することはなく
-    // 関数呼び出し後も、そのレジスタを利用できる。
-    // 結果的に、不要なメモリアクセスを発生させないことをコンパイラに指示しているということであり、
-    // const は変更しないという意味論だけではないということ。
-    // 
-    // メンバ関数間でエイリアスをもつメンバ変数群についても同様の話がいえる。
-    // メンバ関数の const {} は、先述のレジスタ破棄を防止するというコンパイラへの指示でもある。
+    I_Socket_Type const* GetEventSocket(WSAPOLLFD const* p_in_ary_pollfd)
     {
-        p_in_ary_pollfd = _p_in_ary_pollfd;
+        //p_in_ary_pollfd = _p_in_ary_pollfd;
+        if (p_in_ary_pollfd == nullptr)
+        {
+            throw "WsaPollfd:: GetEventSocket(): p_in_ary_pollfd が設定されていません";
+        }
         const UINT idx = (UINT)(p_in_ary_pollfd - m_ary_pollfd);
         return m_vec_Socket[idx];
     }
 
-    std::pair<WSAPOLLFD const*, const ULONG> Get_params_WSAPoll()
-    // 変更前：std::pair<WSAPOLLFD*, const ULONG>
-    // 変更後：std::pair<WSAPOLLFD const*, const ULONG>
-    // 管理しているオブジェクト（m_ary_pollfd）を他の管理主体に書き換えられてはならない
+    std::pair<WSAPOLLFD*, const ULONG> Get_params_WSAPoll()
     {
         return { m_ary_pollfd, pcs_valid_pollfd }; // RVO
     }
 
-    WSAPOLLFD const* Get_p_in_ary_pollfd()
+    WSAPOLLFD const* Get_ary_pollfd()
     {
-        return p_in_ary_pollfd;
+        return m_ary_pollfd;
     }
 };
 
@@ -274,7 +246,7 @@ public:
         }
     }
 
-    virtual WSAPOLLFD const* OnEvent(const short revents) const override
+    virtual WSAPOLLFD const* OnEvent(const short revents, WSAPOLLFD const* p_in_ary_pollfd) const override
     {
         if (revents & POLLRDNORM)
         {
@@ -308,11 +280,11 @@ public:
                 std::cout << "--- Client:: Delete()" << std::endl;
             }
             
-            return m_p_WsaPollfd->Delete();
+            m_p_WsaPollfd->Delete(p_in_ary_pollfd);
+            --p_in_ary_pollfd;
         }
         
-        return m_p_WsaPollfd->Get_p_in_ary_pollfd();
-    
+        return p_in_ary_pollfd;
     }
 };
 
@@ -333,6 +305,7 @@ public:
         {
             throw "!!! Socket_server:: socket()";
         }
+
         {
             const BOOL mode_socket_reuse = 1;
             if (setsockopt(mc_fd_sock_listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&mode_socket_reuse, sizeof mode_socket_reuse) == SOCKET_ERROR)
@@ -383,7 +356,7 @@ public:
         }
     }
 
-    virtual WSAPOLLFD const* OnEvent(const short revents) const override
+    virtual WSAPOLLFD const* OnEvent(const short revents, WSAPOLLFD const* p_in_ary_pollfd) const override
     {
         if (revents & POLLRDNORM)
         {
@@ -392,13 +365,21 @@ public:
                 std::cout << "+++ Server:: new Socket_client()" << std::endl;
             }
 
+            WSAPOLLFD const* const ary_pollfd_old = m_p_WsaPollfd->Get_ary_pollfd();
+
             if (new Socket_client(mc_fd_sock_listener, m_p_WsaPollfd) == nullptr)
             {
                 throw "Socket_server:: OnEvent(): new Socket_client(mc_fd_sock_listener, m_p_WsaPollfd))";
             }
+
+            WSAPOLLFD const* const ary_pollfd_new = m_p_WsaPollfd->Get_ary_pollfd();
+            if (ary_pollfd_old != ary_pollfd_new) // リアロケーションが発生したか判定
+            {
+                p_in_ary_pollfd = &ary_pollfd_new[(UINT)(p_in_ary_pollfd - ary_pollfd_old)];
+            }
         }
 
-        return m_p_WsaPollfd->Get_p_in_ary_pollfd();
+        return p_in_ary_pollfd;
     }
 };
 
@@ -439,8 +420,7 @@ int main_2()
 
         auto [ary_pollfd, pcs_valid_pollfd] = wsapollfd.Get_params_WSAPoll();
 
-        // API に合わせてキャストを行うのは仕方がない
-        int cnt_Event_WSAPoll = WSAPoll((WSAPOLLFD*)ary_pollfd, pcs_valid_pollfd, -1);
+        int cnt_Event_WSAPoll = WSAPoll(ary_pollfd, pcs_valid_pollfd, -1);
 
         if (cnt_Event_WSAPoll == SOCKET_ERROR)
         {
@@ -460,8 +440,6 @@ int main_2()
         }
 
         WSAPOLLFD const* p_in_ary_pollfd = ary_pollfd;
-        // この位置に const が入っているのは必然。
-        // ary_pollfd の内容は WsaPollfd class が管理しているものだから、こちらから書き換えることはできない。
         for (;;)
         {
             if (cnt_Event_WSAPoll == 0)
@@ -473,10 +451,7 @@ int main_2()
             if (revents)
             {
                 const I_Socket_Type* const EventSocket = wsapollfd.GetEventSocket(p_in_ary_pollfd);
-                // 1 つ目の const は必然。
-                // EventSocket の内容は WsaPollfd class が管理しているものだから、こちらから書き換えることはできない。
-                p_in_ary_pollfd = EventSocket->OnEvent(revents);
-                // p_in_ary_pollfd は main 関数の管理オブジェクトなので、main 関数が書き換える。
+                p_in_ary_pollfd = EventSocket->OnEvent(revents, p_in_ary_pollfd);
                 --cnt_Event_WSAPoll;
             }
 

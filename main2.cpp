@@ -160,11 +160,6 @@ public:
 
     I_Socket_Type const* GetEventSocket(WSAPOLLFD const* p_in_ary_pollfd)
     {
-        //p_in_ary_pollfd = _p_in_ary_pollfd;
-        if (p_in_ary_pollfd == nullptr)
-        {
-            throw "WsaPollfd:: GetEventSocket(): p_in_ary_pollfd ‚ªİ’è‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ";
-        }
         const UINT idx = (UINT)(p_in_ary_pollfd - m_ary_pollfd);
         return m_vec_Socket[idx];
     }
